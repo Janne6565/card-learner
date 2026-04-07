@@ -97,29 +97,28 @@ export async function POST(request: NextRequest, { params }: Props) {
             ? "good_count"
             : "easy_count";
 
-    // Increment completed and the rating-specific counter
-    const { data: updatedSession } = await supabase.rpc("increment_session_counters", {
-      p_token: token,
-      p_rating_column: ratingCountColumn,
-    });
+    const newCompleted = session.completed + 1;
+    const updateData: Record<string, unknown> = {
+      completed: newCompleted,
+      [ratingCountColumn]:
+        (session[ratingCountColumn as keyof typeof session] as number) + 1,
+    };
 
-    // Fallback: manual update if RPC doesn't exist
-    if (!updatedSession) {
-      const newCompleted = session.completed + 1;
-      const updateData: Record<string, unknown> = {
-        completed: newCompleted,
-        [ratingCountColumn]: (session[ratingCountColumn as keyof typeof session] as number) + 1,
-      };
+    if (newCompleted >= session.total) {
+      updateData.status = "done";
+    }
 
-      // Check if we're done
-      if (newCompleted >= session.total) {
-        updateData.status = "done";
-      }
+    const { error: sessionUpdateError } = await supabase
+      .from("study_sessions")
+      .update(updateData)
+      .eq("token", token);
 
-      await supabase
-        .from("study_sessions")
-        .update(updateData)
-        .eq("token", token);
+    if (sessionUpdateError) {
+      console.error("Session update error:", sessionUpdateError);
+      return NextResponse.json(
+        { error: sessionUpdateError.message },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({

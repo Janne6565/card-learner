@@ -63,42 +63,73 @@ export default function StudyPage() {
     createSession();
   }, [deckId]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates + poll as a fallback
   useEffect(() => {
     if (!session?.token) return;
 
+    const token = session.token;
     const supabase = createClient();
+
+    const applyUpdate = (updated: Partial<SessionData>) => {
+      setSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              completed: updated.completed ?? prev.completed,
+              again_count: updated.again_count ?? prev.again_count,
+              hard_count: updated.hard_count ?? prev.hard_count,
+              good_count: updated.good_count ?? prev.good_count,
+              easy_count: updated.easy_count ?? prev.easy_count,
+              status: updated.status ?? prev.status,
+            }
+          : prev,
+      );
+    };
+
     const channel = supabase
-      .channel(`session:${session.token}`)
+      .channel(`session:${token}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "study_sessions",
-          filter: `token=eq.${session.token}`,
+          filter: `token=eq.${token}`,
         },
         (payload) => {
-          const updated = payload.new as SessionData;
-          setSession((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  completed: updated.completed,
-                  again_count: updated.again_count,
-                  hard_count: updated.hard_count,
-                  good_count: updated.good_count,
-                  easy_count: updated.easy_count,
-                  status: updated.status,
-                }
-              : prev,
-          );
+          applyUpdate(payload.new as SessionData);
         },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("[study] realtime status:", status, err ?? "");
+      });
+
+    // Polling fallback — ensures live progress even if realtime is blocked
+    // by RLS/network/proxy. Stops when the session is done.
+    const interval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from("study_sessions")
+        .select(
+          "completed, again_count, hard_count, good_count, easy_count, status",
+        )
+        .eq("token", token)
+        .single();
+
+      if (error) {
+        console.error("[study] poll error:", error);
+        return;
+      }
+      if (data) {
+        applyUpdate(data as Partial<SessionData>);
+        if (data.status === "done" || data.status === "expired") {
+          clearInterval(interval);
+        }
+      }
+    }, 2000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [session?.token]);
 
