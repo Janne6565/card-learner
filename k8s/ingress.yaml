@@ -8,10 +8,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - cards.example.com    # <-- replace with your domain
+        - card-learner.jannekeipert.de
       secretName: card-learner-tls
   rules:
-    - host: cards.example.com  # <-- replace with your domain
+    - host: card-learner.jannekeipert.de
       http:
         paths:
           - path: /
