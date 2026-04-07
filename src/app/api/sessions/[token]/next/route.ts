@@ -22,15 +22,6 @@ export async function GET(_request: NextRequest, { params }: Props) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // Check expiry
-    if (new Date(session.expires_at) < new Date()) {
-      await supabase
-        .from("study_sessions")
-        .update({ status: "expired" })
-        .eq("token", token);
-      return NextResponse.json({ error: "Session expired" }, { status: 410 });
-    }
-
     if (session.status === "done") {
       return NextResponse.json({ done: true, completed: session.completed, total: session.total });
     }

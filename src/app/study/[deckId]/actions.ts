@@ -2,6 +2,7 @@
 
 import { nanoid } from "nanoid";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 /** Create a new study session for a deck and redirect into it. */
@@ -24,9 +25,8 @@ export async function createStudySession(deckId: string) {
   if (!count || count === 0) throw new Error("No due cards");
 
   const token = nanoid(10);
-  const expiresAt = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  ).toISOString(); // 30 days
+  // Sessions don't expire — set a far-future sentinel date
+  const expiresAt = new Date("2100-01-01T00:00:00Z").toISOString();
 
   const { error: insertError } = await supabase.from("study_sessions").insert({
     token,
@@ -40,4 +40,21 @@ export async function createStudySession(deckId: string) {
   if (insertError) throw new Error(insertError.message);
 
   redirect(`/study/${deckId}/${token}`);
+}
+
+/** Delete a study session owned by the current user. */
+export async function deleteStudySession(deckId: string, token: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  await supabase
+    .from("study_sessions")
+    .delete()
+    .eq("token", token)
+    .eq("user_id", user.id);
+
+  revalidatePath(`/study/${deckId}`);
 }
