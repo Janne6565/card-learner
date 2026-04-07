@@ -126,7 +126,7 @@ export default async function StudyPickerPage({ params }: Props) {
                 <button
                   type="submit"
                   title="Delete session"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                 >
                   <svg
                     className="w-4 h-4"
