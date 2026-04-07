@@ -1,201 +1,106 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import QrCode from "@/components/QrCode";
-import ProgressCounter from "@/components/ProgressCounter";
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createStudySession } from "./actions";
 
-interface SessionData {
-  token: string;
-  total: number;
-  completed: number;
-  again_count: number;
-  hard_count: number;
-  good_count: number;
-  easy_count: number;
-  status: string;
+interface Props {
+  params: Promise<{ deckId: string }>;
 }
 
-export default function StudyPage() {
-  const params = useParams();
-  const router = useRouter();
-  const deckId = params.deckId as string;
+export default async function StudyPickerPage({ params }: Props) {
+  const { deckId } = await params;
 
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  // Create study session
-  useEffect(() => {
-    async function createSession() {
-      try {
-        const res = await fetch("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deckId }),
-        });
-        const data = await res.json();
+  const { data: deck } = await supabase
+    .from("decks")
+    .select("id, name")
+    .eq("id", deckId)
+    .single();
+  if (!deck) notFound();
 
-        if (!res.ok) {
-          setError(data.error || "Failed to create session");
-          setLoading(false);
-          return;
-        }
+  const nowIso = new Date().toISOString();
 
-        setSession({
-          token: data.token,
-          total: data.total,
-          completed: 0,
-          again_count: 0,
-          hard_count: 0,
-          good_count: 0,
-          easy_count: 0,
-          status: "pending",
-        });
-        setLoading(false);
-      } catch {
-        setError("Network error");
-        setLoading(false);
-      }
-    }
-    createSession();
-  }, [deckId]);
+  const { data: sessions } = await supabase
+    .from("study_sessions")
+    .select("token, total, completed, status, created_at, expires_at")
+    .eq("deck_id", deckId)
+    .eq("user_id", user.id)
+    .in("status", ["pending", "active"])
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false });
 
-  // Subscribe to realtime updates + poll as a fallback
-  useEffect(() => {
-    if (!session?.token) return;
-
-    const token = session.token;
-    const supabase = createClient();
-
-    const applyUpdate = (updated: Partial<SessionData>) => {
-      setSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              completed: updated.completed ?? prev.completed,
-              again_count: updated.again_count ?? prev.again_count,
-              hard_count: updated.hard_count ?? prev.hard_count,
-              good_count: updated.good_count ?? prev.good_count,
-              easy_count: updated.easy_count ?? prev.easy_count,
-              status: updated.status ?? prev.status,
-            }
-          : prev,
-      );
-    };
-
-    const channel = supabase
-      .channel(`session:${token}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "study_sessions",
-          filter: `token=eq.${token}`,
-        },
-        (payload) => {
-          applyUpdate(payload.new as SessionData);
-        },
-      )
-      .subscribe((status, err) => {
-        console.log("[study] realtime status:", status, err ?? "");
-      });
-
-    // Polling fallback — ensures live progress even if realtime is blocked
-    // by RLS/network/proxy. Stops when the session is done.
-    const interval = setInterval(async () => {
-      const { data, error } = await supabase
-        .from("study_sessions")
-        .select(
-          "completed, again_count, hard_count, good_count, easy_count, status",
-        )
-        .eq("token", token)
-        .single();
-
-      if (error) {
-        console.error("[study] poll error:", error);
-        return;
-      }
-      if (data) {
-        applyUpdate(data as Partial<SessionData>);
-        if (data.status === "done" || data.status === "expired") {
-          clearInterval(interval);
-        }
-      }
-    }, 2000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
-  }, [session?.token]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-gray-500">Creating study session...</p>
-      </div>
-    );
+  // If no active sessions, create one and redirect straight into it.
+  if (!sessions || sessions.length === 0) {
+    await createStudySession(deckId);
+    return null; // unreachable: createStudySession redirects
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-red-600 dark:text-red-400">{error}</p>
-          <Link
-            href={`/decks/${deckId}`}
-            className="text-blue-600 hover:underline dark:text-blue-400"
-          >
-            Back to deck
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session) return null;
-
-  const sessionUrl = `${window.location.origin}/session/${session.token}`;
+  const createNew = createStudySession.bind(null, deckId);
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-8">
-      <div className="text-center space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold mb-2">Study Session</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Scan the QR code with your phone to start studying
-          </p>
-        </div>
-
-        <QrCode url={sessionUrl} size={280} />
-
-        <div className="text-xs text-gray-400 dark:text-gray-500 break-all max-w-xs mx-auto">
-          {sessionUrl}
-        </div>
-
-        <ProgressCounter
-          completed={session.completed}
-          total={session.total}
-          againCount={session.again_count}
-          hardCount={session.hard_count}
-          goodCount={session.good_count}
-          easyCount={session.easy_count}
-          status={session.status}
-        />
-
-        {session.status === "done" && (
-          <button
-            onClick={() => router.push(`/decks/${deckId}`)}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            Back to Deck
-          </button>
-        )}
+    <div className="mx-auto w-full max-w-2xl px-4 py-8">
+      <div className="mb-6">
+        <Link
+          href={`/decks/${deckId}`}
+          className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          &larr; {deck.name}
+        </Link>
       </div>
+
+      <h1 className="text-2xl font-bold">Study Sessions</h1>
+      <p className="mt-1 text-gray-500 dark:text-gray-400">
+        Resume an existing session or start a new one.
+      </p>
+
+      <ul className="mt-6 space-y-3">
+        {sessions.map((s) => {
+          const pct =
+            s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
+          return (
+            <li key={s.token}>
+              <Link
+                href={`/study/${deckId}/${s.token}`}
+                className="block rounded-lg border border-gray-200 dark:border-gray-800 p-4 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">
+                      {s.completed} / {s.total} cards ({pct}%)
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Started {new Date(s.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {s.status}
+                  </span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+                  <div
+                    className="h-full bg-green-500 transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      <form action={createNew} className="mt-8">
+        <button
+          type="submit"
+          className="rounded-lg bg-green-600 px-6 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+        >
+          Start New Session
+        </button>
+      </form>
     </div>
   );
 }

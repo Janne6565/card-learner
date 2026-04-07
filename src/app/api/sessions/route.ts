@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
     }
 
     const token = nanoid(10);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min
+    const expiresAt = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString(); // 30 days
 
     const { error: insertError } = await supabase.from("study_sessions").insert({
       token,
