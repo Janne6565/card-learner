@@ -14,7 +14,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -54,3 +54,17 @@ jobs:
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Update deployment image tag
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          IMAGE="ghcr.io/${{ github.repository }}:sha-${SHORT_SHA}"
+          sed -i "s|image: ghcr.io/${{ github.repository }}:.*|image: ${IMAGE}|" k8s/deployment.yaml
+
+      - name: Commit and push updated deployment.yaml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/deployment.yaml
+          git diff --cached --quiet || git commit -m "chore: update deployment image tag to sha-$(git rev-parse --short HEAD)"
+          git push origin HEAD:${{ github.ref_name }}
