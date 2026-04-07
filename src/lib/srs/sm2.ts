@@ -28,7 +28,7 @@ export interface SrsState {
  * For ratings >= 2, repetitions is incremented.
  */
 export function sm2(card: SrsState, rating: Rating, now: Date = new Date()): SrsState {
-  let { easeFactor, intervalDays, repetitions, lapses } = card;
+  const { easeFactor, intervalDays, repetitions, lapses } = card;
 
   let newInterval: number;
   let newEF = easeFactor;

@@ -1,7 +1,8 @@
 "use server";
 
 import { nanoid } from "nanoid";
-import { redirect, revalidatePath } from "next/navigation";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 /** Create a new study session for a deck and redirect into it. */
