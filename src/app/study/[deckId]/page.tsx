@@ -102,26 +102,26 @@ export default async function StudyPickerPage({ params }: Props) {
           return (
             <li
               key={s.token}
-              className="group relative rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+              className="flex rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
             >
               {/* Clickable session area */}
               {isResumable ? (
                 <Link
                   href={`/study/${deckId}/${s.token}`}
-                  className="block p-5 pr-14"
+                  className="flex-1 p-5 min-w-0"
                 >
                   <SessionCardContent s={s} pct={pct} />
                 </Link>
               ) : (
-                <div className="block p-5 pr-14 opacity-70">
+                <div className="flex-1 p-5 min-w-0 opacity-70">
                   <SessionCardContent s={s} pct={pct} />
                 </div>
               )}
 
-              {/* Delete button */}
+              {/* Delete button — separate flex item so it never overlaps the link */}
               <form
                 action={deleteAction}
-                className="absolute top-4 right-4"
+                className="flex items-center px-3 border-l border-gray-100 dark:border-gray-800"
               >
                 <button
                   type="submit"
