@@ -2,14 +2,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: card-learner
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - hosts:
         - card-learner.jannekeipert.de
-      secretName: card-learner-tls
+      secretName: multi-domain-cert
   rules:
     - host: card-learner.jannekeipert.de
       http:
