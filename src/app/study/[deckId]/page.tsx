@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createStudySession, deleteStudySession } from "./actions";
+import { deleteStudySession } from "./actions";
 
 interface Props {
   params: Promise<{ deckId: string }>;
@@ -39,13 +39,10 @@ export default async function StudyPickerPage({ params }: Props) {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  // If no sessions at all, create one and redirect straight into it.
+  // No sessions yet — send to settings form to create the first one.
   if (!sessions || sessions.length === 0) {
-    await createStudySession(deckId);
-    return null; // unreachable: createStudySession redirects
+    redirect(`/study/${deckId}/new`);
   }
-
-  const createNew = createStudySession.bind(null, deckId);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -80,14 +77,12 @@ export default async function StudyPickerPage({ params }: Props) {
               Resume an existing session or start a new one.
             </p>
           </div>
-          <form action={createNew} className="shrink-0">
-            <button
-              type="submit"
-              className="rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
-            >
-              + New Session
-            </button>
-          </form>
+          <Link
+            href={`/study/${deckId}/new`}
+            className="shrink-0 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
+          >
+            + New Session
+          </Link>
         </div>
       </div>
 

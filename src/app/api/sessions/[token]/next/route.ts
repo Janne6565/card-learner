@@ -23,7 +23,11 @@ export async function GET(_request: NextRequest, { params }: Props) {
     }
 
     if (session.status === "done") {
-      return NextResponse.json({ done: true, completed: session.completed, total: session.total });
+      return NextResponse.json({
+        done: true,
+        completed: session.completed,
+        total: session.total,
+      });
     }
 
     // Mark active if pending
@@ -34,8 +38,81 @@ export async function GET(_request: NextRequest, { params }: Props) {
         .eq("token", token);
     }
 
-    // Fetch next due card
     const now = new Date().toISOString();
+
+    // ── Batch mode ──────────────────────────────────────────────────────────
+    if (session.batch_card_ids !== null) {
+      const graduated: string[] = session.graduated_card_ids ?? [];
+      let batchIds: string[] = session.batch_card_ids ?? [];
+
+      // Cards in the current batch that haven't been graduated yet
+      let remaining = batchIds.filter((id: string) => !graduated.includes(id));
+
+      if (remaining.length === 0) {
+        // Current batch is fully mastered — load the next batch
+        const { data: nextBatch } = await supabase
+          .from("cards")
+          .select("id")
+          .eq("deck_id", session.deck_id)
+          .eq("user_id", session.user_id)
+          .lte("due_at", now)
+          .not("id", "in", `(${graduated.join(",")})`)
+          .order("due_at", { ascending: true })
+          .limit(session.batch_size);
+
+        if (!nextBatch || nextBatch.length === 0) {
+          // No more cards — session complete
+          await supabase
+            .from("study_sessions")
+            .update({ status: "done" })
+            .eq("token", token);
+          return NextResponse.json({
+            done: true,
+            completed: session.completed,
+            total: session.total,
+          });
+        }
+
+        batchIds = nextBatch.map((c: { id: string }) => c.id);
+        await supabase
+          .from("study_sessions")
+          .update({ batch_card_ids: batchIds })
+          .eq("token", token);
+        remaining = batchIds;
+      }
+
+      // Fetch the next due card within the remaining batch
+      const { data: card } = await supabase
+        .from("cards")
+        .select("id, front, back, is_html, tags")
+        .in("id", remaining)
+        .lte("due_at", now)
+        .order("due_at", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (!card) {
+        // All remaining batch cards are requeued slightly in the future (race).
+        // Return a small wait hint — the phone will retry.
+        return NextResponse.json({ waiting: true });
+      }
+
+      return NextResponse.json({
+        done: false,
+        card,
+        progress: {
+          completed: session.completed,
+          total: session.total,
+        },
+        batchProgress: {
+          graduated: graduated.length,
+          batchSize: session.batch_size,
+          batchTotal: batchIds.length,
+        },
+      });
+    }
+
+    // ── Unlimited mode (no batching) ─────────────────────────────────────────
     const { data: card, error: cardError } = await supabase
       .from("cards")
       .select("id, front, back, is_html, tags")
@@ -47,7 +124,6 @@ export async function GET(_request: NextRequest, { params }: Props) {
       .single();
 
     if (cardError || !card) {
-      // No more due cards — mark session done
       await supabase
         .from("study_sessions")
         .update({ status: "done" })

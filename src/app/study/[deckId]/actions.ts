@@ -5,8 +5,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
-/** Create a new study session for a deck and redirect into it. */
-export async function createStudySession(deckId: string) {
+/**
+ * Create a new study session for a deck and redirect into it.
+ * @param batchSize  Number of cards per batch, or null for unlimited (study all due cards).
+ */
+export async function createStudySession(deckId: string, batchSize: number | null = null) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -25,8 +28,21 @@ export async function createStudySession(deckId: string) {
   if (!count || count === 0) throw new Error("No due cards");
 
   const token = nanoid(10);
-  // Sessions don't expire — set a far-future sentinel date
   const expiresAt = new Date("2100-01-01T00:00:00Z").toISOString();
+
+  // Load the first batch of card IDs when batch mode is enabled
+  let batchCardIds: string[] | null = null;
+  if (batchSize !== null) {
+    const { data: firstBatch } = await supabase
+      .from("cards")
+      .select("id")
+      .eq("deck_id", deckId)
+      .eq("user_id", user.id)
+      .lte("due_at", now)
+      .order("due_at", { ascending: true })
+      .limit(batchSize);
+    batchCardIds = firstBatch?.map((c) => c.id) ?? [];
+  }
 
   const { error: insertError } = await supabase.from("study_sessions").insert({
     token,
@@ -35,6 +51,9 @@ export async function createStudySession(deckId: string) {
     total: count,
     completed: 0,
     expires_at: expiresAt,
+    batch_size: batchSize,
+    batch_card_ids: batchCardIds,
+    graduated_card_ids: [],
   });
 
   if (insertError) throw new Error(insertError.message);
@@ -50,10 +69,6 @@ export async function deleteStudySession(deckId: string, token: string) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Use the service-role client to bypass RLS for the delete. Ownership is
-  // still enforced explicitly by the user_id filter below. The initial
-  // migration shipped without a DELETE policy on study_sessions, so the
-  // anon-key client would silently match zero rows.
   const service = createServiceClient();
   const { error } = await service
     .from("study_sessions")

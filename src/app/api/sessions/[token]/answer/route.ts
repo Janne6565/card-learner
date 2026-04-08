@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, { params }: Props) {
       return NextResponse.json({ error: "Card not found" }, { status: 404 });
     }
 
-    // Run SM-2
+    // Run SM-2 (always updates EF and interval for future sessions)
     const now = new Date();
     const newState = sm2(
       {
@@ -62,6 +62,14 @@ export async function POST(request: NextRequest, { params }: Props) {
       now,
     );
 
+    // In batch mode: Again/Hard/Good requeue the card immediately so it
+    // stays in the current batch; only Easy graduates it (SM-2 due_at kept).
+    const isBatchMode = session.batch_size !== null;
+    const finalDueAt =
+      isBatchMode && rating !== 4
+        ? now.toISOString() // requeue immediately
+        : newState.dueAt.toISOString();
+
     // Update card
     const { error: updateError } = await supabase
       .from("cards")
@@ -69,7 +77,7 @@ export async function POST(request: NextRequest, { params }: Props) {
         ease_factor: newState.easeFactor,
         interval_days: newState.intervalDays,
         repetitions: newState.repetitions,
-        due_at: newState.dueAt.toISOString(),
+        due_at: finalDueAt,
         lapses: newState.lapses,
       })
       .eq("id", cardId);
@@ -87,6 +95,17 @@ export async function POST(request: NextRequest, { params }: Props) {
       new_interval: newState.intervalDays,
     });
 
+    // In batch mode: graduate card on Easy (deduplicated)
+    if (isBatchMode && rating === 4) {
+      const existing: string[] = session.graduated_card_ids ?? [];
+      if (!existing.includes(cardId)) {
+        await supabase
+          .from("study_sessions")
+          .update({ graduated_card_ids: [...existing, cardId] })
+          .eq("token", token);
+      }
+    }
+
     // Update session counters
     const ratingCountColumn =
       rating === 1
@@ -97,7 +116,6 @@ export async function POST(request: NextRequest, { params }: Props) {
             ? "good_count"
             : "easy_count";
 
-    // Increment completed and the rating-specific counter
     const { data: updatedSession } = await supabase.rpc("increment_session_counters", {
       p_token: token,
       p_rating_column: ratingCountColumn,
@@ -111,8 +129,8 @@ export async function POST(request: NextRequest, { params }: Props) {
         [ratingCountColumn]: (session[ratingCountColumn as keyof typeof session] as number) + 1,
       };
 
-      // Check if we're done
-      if (newCompleted >= session.total) {
+      // In unlimited mode, mark done when all cards are answered
+      if (!isBatchMode && newCompleted >= session.total) {
         updateData.status = "done";
       }
 

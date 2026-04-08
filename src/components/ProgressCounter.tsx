@@ -1,5 +1,11 @@
 "use client";
 
+interface BatchProgress {
+  graduated: number;
+  batchSize: number;
+  batchTotal: number;
+}
+
 interface ProgressCounterProps {
   completed: number;
   total: number;
@@ -8,6 +14,7 @@ interface ProgressCounterProps {
   goodCount: number;
   easyCount: number;
   status: string;
+  batchProgress?: BatchProgress;
 }
 
 export default function ProgressCounter({
@@ -18,16 +25,39 @@ export default function ProgressCounter({
   goodCount,
   easyCount,
   status,
+  batchProgress,
 }: ProgressCounterProps) {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
     <div className="w-full max-w-sm mx-auto space-y-4">
-      {/* Progress bar */}
+      {/* Batch progress (shown in batch mode) */}
+      {batchProgress && (
+        <div>
+          <div className="flex justify-between text-sm mb-1">
+            <span className="font-medium">
+              Batch: {batchProgress.graduated} / {batchProgress.batchTotal} mastered
+            </span>
+            <span className="text-gray-500 dark:text-gray-400 text-xs">
+              {batchProgress.batchSize} per batch
+            </span>
+          </div>
+          <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{
+                width: `${batchProgress.batchTotal > 0 ? Math.round((batchProgress.graduated / batchProgress.batchTotal) * 100) : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Overall session progress */}
       <div>
         <div className="flex justify-between text-sm mb-1">
           <span className="font-medium">
-            {completed} / {total}
+            {batchProgress ? `${batchProgress.graduated} / ${total} total` : `${completed} / ${total}`}
           </span>
           <span className="text-gray-500 dark:text-gray-400">{pct}%</span>
         </div>
