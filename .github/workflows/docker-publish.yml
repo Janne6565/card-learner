@@ -60,8 +60,9 @@ jobs:
       - name: Update deployment image tag
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          IMAGE="ghcr.io/${{ github.repository }}:sha-${SHORT_SHA}"
-          sed -i "s|image: ghcr.io/${{ github.repository }}:.*|image: ${IMAGE}|" k8s/deployment.yaml
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${REPO_LOWER}:sha-${SHORT_SHA}"
+          sed -i "s|image: ghcr.io/${REPO_LOWER}:.*|image: ${IMAGE}|" k8s/deployment.yaml
 
       - name: Commit and push updated deployment.yaml
         run: |
