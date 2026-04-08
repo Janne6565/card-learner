@@ -19,12 +19,14 @@ export default function NewSessionPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    try {
-      await createStudySession(deckId, unlimited ? null : batchSize);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create session");
-      setLoading(false);
+    const result = await createStudySession(deckId, unlimited ? null : batchSize);
+    // If we reach here, the redirect didn't fire — must be an error
+    if (result?.error) {
+      setError(result.error);
+    } else {
+      setError("Failed to create session");
     }
+    setLoading(false);
   };
 
   return (

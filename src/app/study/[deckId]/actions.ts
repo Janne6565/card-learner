@@ -5,11 +5,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
+export type ActionResult = { error: string } | { error: null };
+
 /**
  * Create a new study session for a deck and redirect into it.
  * @param batchSize  Number of cards per batch, or null for unlimited (study all due cards).
  */
-export async function createStudySession(deckId: string, batchSize: number | null = null) {
+export async function createStudySession(deckId: string, batchSize: number | null = null): Promise<ActionResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -24,8 +26,8 @@ export async function createStudySession(deckId: string, batchSize: number | nul
     .eq("user_id", user.id)
     .lte("due_at", now);
 
-  if (countError) throw new Error(countError.message);
-  if (!count || count === 0) throw new Error("No due cards");
+  if (countError) return { error: countError.message };
+  if (!count || count === 0) return { error: "No due cards" };
 
   const token = nanoid(10);
   const expiresAt = new Date("2100-01-01T00:00:00Z").toISOString();
@@ -56,13 +58,13 @@ export async function createStudySession(deckId: string, batchSize: number | nul
     graduated_card_ids: [],
   });
 
-  if (insertError) throw new Error(insertError.message);
+  if (insertError) return { error: insertError.message };
 
   redirect(`/study/${deckId}/${token}`);
 }
 
 /** Delete a study session owned by the current user. */
-export async function deleteStudySession(deckId: string, token: string) {
+export async function deleteStudySession(deckId: string, token: string): Promise<void> {
   const supabase = await createClient();
   const {
     data: { user },
