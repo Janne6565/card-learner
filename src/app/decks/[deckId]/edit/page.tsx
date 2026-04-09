@@ -1,67 +1,27 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { updateDeck } from "../actions";
 
-export default function EditDeckPage() {
-  const { deckId } = useParams<{ deckId: string }>();
-  const router = useRouter();
+interface Props {
+  params: Promise<{ deckId: string }>;
+}
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState("");
+export default async function EditDeckPage({ params }: Props) {
+  const { deckId } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("decks")
-      .select("name, description")
-      .eq("id", deckId)
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) {
-          setError("Deck not found");
-        } else {
-          setName(data.name);
-          setDescription(data.description ?? "");
-        }
-        setFetching(false);
-      });
-  }, [deckId]);
+  const { data: deck } = await supabase
+    .from("decks")
+    .select("name, description")
+    .eq("id", deckId)
+    .single();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
+  if (!deck) notFound();
 
-    setLoading(true);
-    setError("");
-
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from("decks")
-      .update({ name: name.trim(), description: description.trim() || null })
-      .eq("id", deckId);
-
-    if (updateError) {
-      setError(updateError.message);
-      setLoading(false);
-      return;
-    }
-
-    router.push(`/decks/${deckId}`);
-  };
-
-  if (fetching) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="w-7 h-7 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin" />
-      </div>
-    );
-  }
+  const action = updateDeck.bind(null, deckId);
 
   return (
     <div className="mx-auto w-full max-w-lg px-4 py-10">
@@ -78,16 +38,16 @@ export default function EditDeckPage() {
         <h1 className="mt-4 text-3xl font-bold tracking-tight">Edit Deck</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form action={action} className="space-y-5">
         <div>
           <label htmlFor="name" className="block text-sm font-semibold mb-1.5">
             Deck Name
           </label>
           <input
             id="name"
+            name="name"
             type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            defaultValue={deck.name}
             className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., German Vocabulary"
             required
@@ -100,17 +60,13 @@ export default function EditDeckPage() {
           </label>
           <textarea
             id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            name="description"
+            defaultValue={deck.description ?? ""}
             className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             rows={3}
             placeholder="What is this deck about?"
           />
         </div>
-
-        {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        )}
 
         <div className="flex gap-3 pt-1">
           <Link
@@ -121,10 +77,9 @@ export default function EditDeckPage() {
           </Link>
           <button
             type="submit"
-            disabled={loading || !name.trim()}
-            className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
+            className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors"
           >
-            {loading ? "Saving…" : "Save Changes"}
+            Save Changes
           </button>
         </div>
       </form>
