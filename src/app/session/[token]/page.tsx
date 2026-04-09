@@ -19,12 +19,20 @@ interface BatchProgress {
   batchTotal: number;
 }
 
+interface RatingCounts {
+  again: number;
+  hard: number;
+  good: number;
+  easy: number;
+}
+
 interface SessionState {
   done: boolean;
   waiting?: boolean;
   card?: CardData;
   progress?: { completed: number; total: number };
   batchProgress?: BatchProgress;
+  ratingCounts?: RatingCounts;
   error?: string;
 }
 
@@ -61,6 +69,7 @@ export default function PhoneSessionPage() {
           card: data.card,
           progress: data.progress,
           batchProgress: data.batchProgress,
+          ratingCounts: data.ratingCounts,
         });
       }
     } catch {
@@ -214,6 +223,28 @@ export default function PhoneSessionPage() {
                   width: `${state.progress.total > 0 ? ((bp ? bp.graduated : state.progress.completed) / state.progress.total) * 100 : 0}%`,
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Rating breakdown */}
+        {state.ratingCounts && (
+          <div className="grid grid-cols-4 gap-1.5 text-center text-xs w-full">
+            <div className="rounded-lg bg-red-50 dark:bg-red-950 py-1.5">
+              <div className="font-bold text-red-600 dark:text-red-400">{state.ratingCounts.again}</div>
+              <div className="text-red-500 dark:text-red-400 text-[10px]">Again</div>
+            </div>
+            <div className="rounded-lg bg-orange-50 dark:bg-orange-950 py-1.5">
+              <div className="font-bold text-orange-600 dark:text-orange-400">{state.ratingCounts.hard}</div>
+              <div className="text-orange-500 dark:text-orange-400 text-[10px]">Hard</div>
+            </div>
+            <div className="rounded-lg bg-green-50 dark:bg-green-950 py-1.5">
+              <div className="font-bold text-green-600 dark:text-green-400">{state.ratingCounts.good}</div>
+              <div className="text-green-500 dark:text-green-400 text-[10px]">Good</div>
+            </div>
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950 py-1.5">
+              <div className="font-bold text-blue-600 dark:text-blue-400">{state.ratingCounts.easy}</div>
+              <div className="text-blue-500 dark:text-blue-400 text-[10px]">Easy</div>
             </div>
           </div>
         )}

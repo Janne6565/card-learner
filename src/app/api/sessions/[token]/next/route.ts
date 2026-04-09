@@ -40,6 +40,21 @@ export async function GET(_request: NextRequest, { params }: Props) {
 
     const now = new Date().toISOString();
 
+    // Compute rating counts from the card_last_ratings map
+    const cardLastRatings: Record<string, number> = session.card_last_ratings ?? {};
+    const computeRatingCounts = (cardIds?: string[]) => {
+      const counts = { again: 0, hard: 0, good: 0, easy: 0 };
+      const ids = cardIds ?? Object.keys(cardLastRatings);
+      for (const id of ids) {
+        const r = cardLastRatings[id];
+        if (r === 1) counts.again++;
+        else if (r === 2) counts.hard++;
+        else if (r === 3) counts.good++;
+        else if (r === 4) counts.easy++;
+      }
+      return counts;
+    };
+
     // ── Batch mode ──────────────────────────────────────────────────────────
     if (session.batch_card_ids !== null) {
       const graduated: string[] = session.graduated_card_ids ?? [];
@@ -109,6 +124,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
           batchSize: session.batch_size,
           batchTotal: batchIds.length,
         },
+        ratingCounts: computeRatingCounts(batchIds),
       });
     }
 
@@ -142,6 +158,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
         completed: session.completed,
         total: session.total,
       },
+      ratingCounts: computeRatingCounts(),
     });
   } catch (err) {
     console.error("Next card error:", err);

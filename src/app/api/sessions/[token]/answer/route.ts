@@ -95,44 +95,36 @@ export async function POST(request: NextRequest, { params }: Props) {
       new_interval: newState.intervalDays,
     });
 
+    // Track each card's latest rating in the session
+    const cardLastRatings: Record<string, number> = session.card_last_ratings ?? {};
+    cardLastRatings[cardId] = rating;
+
     // In batch mode: graduate card on Easy (deduplicated), increment completed only then
     const existing: string[] = session.graduated_card_ids ?? [];
     const isNewGraduation = isBatchMode && rating === 4 && !existing.includes(cardId);
+    const isFirstReview = !isBatchMode && !(cardId in (session.card_last_ratings ?? {}));
 
-    if (isNewGraduation) {
-      await supabase
-        .from("study_sessions")
-        .update({ graduated_card_ids: [...existing, cardId] })
-        .eq("token", token);
-    }
-
-    // Update session counters
-    const ratingCountColumn =
-      rating === 1
-        ? "again_count"
-        : rating === 2
-          ? "hard_count"
-          : rating === 3
-            ? "good_count"
-            : "easy_count";
-
-    // In batch mode: completed = cards graduated (Easy). In unlimited mode: every answer.
-    const shouldIncrementCompleted = isBatchMode ? isNewGraduation : true;
-
-    const newCompleted = shouldIncrementCompleted ? session.completed + 1 : session.completed;
-    const updateData: Record<string, unknown> = {
-      completed: newCompleted,
-      [ratingCountColumn]: (session[ratingCountColumn as keyof typeof session] as number) + 1,
+    const sessionUpdate: Record<string, unknown> = {
+      card_last_ratings: cardLastRatings,
     };
 
-    // In unlimited mode, mark done when all cards are answered
-    if (!isBatchMode && newCompleted >= session.total) {
-      updateData.status = "done";
+    if (isNewGraduation) {
+      sessionUpdate.graduated_card_ids = [...existing, cardId];
+    }
+
+    // In batch mode: completed = cards graduated. In unlimited mode: unique cards reviewed.
+    if (isBatchMode ? isNewGraduation : isFirstReview) {
+      sessionUpdate.completed = session.completed + 1;
+    }
+
+    // In unlimited mode, mark done when all unique cards are answered
+    if (!isBatchMode && (sessionUpdate.completed ?? session.completed) >= session.total) {
+      sessionUpdate.status = "done";
     }
 
     await supabase
       .from("study_sessions")
-      .update(updateData)
+      .update(sessionUpdate)
       .eq("token", token);
 
     return NextResponse.json({

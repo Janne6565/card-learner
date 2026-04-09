@@ -11,11 +11,23 @@ interface SessionData {
   token: string;
   total: number;
   completed: number;
-  again_count: number;
-  hard_count: number;
-  good_count: number;
-  easy_count: number;
   status: string;
+  batch_card_ids: string[] | null;
+  card_last_ratings: Record<string, number> | null;
+}
+
+function computeRatingCounts(session: SessionData) {
+  const ratings = session.card_last_ratings ?? {};
+  const cardIds = session.batch_card_ids ?? Object.keys(ratings);
+  const counts = { again: 0, hard: 0, good: 0, easy: 0 };
+  for (const id of cardIds) {
+    const r = ratings[id];
+    if (r === 1) counts.again++;
+    else if (r === 2) counts.hard++;
+    else if (r === 3) counts.good++;
+    else if (r === 4) counts.easy++;
+  }
+  return counts;
 }
 
 export default function StudySessionPage() {
@@ -37,7 +49,7 @@ export default function StudySessionPage() {
       const { data, error } = await supabase
         .from("study_sessions")
         .select(
-          "token, total, completed, again_count, hard_count, good_count, easy_count, status",
+          "token, total, completed, status, batch_card_ids, card_last_ratings",
         )
         .eq("token", token)
         .single();
@@ -65,11 +77,9 @@ export default function StudySessionPage() {
           ? {
               ...prev,
               completed: updated.completed ?? prev.completed,
-              again_count: updated.again_count ?? prev.again_count,
-              hard_count: updated.hard_count ?? prev.hard_count,
-              good_count: updated.good_count ?? prev.good_count,
-              easy_count: updated.easy_count ?? prev.easy_count,
               status: updated.status ?? prev.status,
+              batch_card_ids: updated.batch_card_ids ?? prev.batch_card_ids,
+              card_last_ratings: updated.card_last_ratings ?? prev.card_last_ratings,
             }
           : prev,
       );
@@ -97,7 +107,7 @@ export default function StudySessionPage() {
       const { data, error } = await supabase
         .from("study_sessions")
         .select(
-          "completed, again_count, hard_count, good_count, easy_count, status",
+          "completed, status, batch_card_ids, card_last_ratings",
         )
         .eq("token", token)
         .single();
@@ -207,11 +217,8 @@ export default function StudySessionPage() {
           <ProgressCounter
             completed={session.completed}
             total={session.total}
-            againCount={session.again_count}
-            hardCount={session.hard_count}
-            goodCount={session.good_count}
-            easyCount={session.easy_count}
             status={session.status}
+            ratingCounts={computeRatingCounts(session)}
           />
         </div>
 
