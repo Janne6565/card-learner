@@ -58,6 +58,12 @@ export default async function DeckDetailPage({ params }: Props) {
 
         <div className="flex gap-3">
           <Link
+            href={`/decks/${deckId}/edit`}
+            className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            Edit
+          </Link>
+          <Link
             href={`/decks/${deckId}/import`}
             className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
