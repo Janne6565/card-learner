@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: card-learner
-          image: ghcr.io/janne6565/card-learner:sha-df10c6d
+          image: ghcr.io/janne6565/card-learner:sha-e56aeb3
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
