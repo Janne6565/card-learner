@@ -27,7 +27,8 @@ export default function ProgressCounter({
   status,
   batchProgress,
 }: ProgressCounterProps) {
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const progressValue = batchProgress ? batchProgress.graduated : completed;
+  const pct = total > 0 ? Math.round((progressValue / total) * 100) : 0;
 
   return (
     <div className="w-full max-w-sm mx-auto space-y-4">

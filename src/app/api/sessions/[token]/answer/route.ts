@@ -95,15 +95,15 @@ export async function POST(request: NextRequest, { params }: Props) {
       new_interval: newState.intervalDays,
     });
 
-    // In batch mode: graduate card on Easy (deduplicated)
-    if (isBatchMode && rating === 4) {
-      const existing: string[] = session.graduated_card_ids ?? [];
-      if (!existing.includes(cardId)) {
-        await supabase
-          .from("study_sessions")
-          .update({ graduated_card_ids: [...existing, cardId] })
-          .eq("token", token);
-      }
+    // In batch mode: graduate card on Easy (deduplicated), increment completed only then
+    const existing: string[] = session.graduated_card_ids ?? [];
+    const isNewGraduation = isBatchMode && rating === 4 && !existing.includes(cardId);
+
+    if (isNewGraduation) {
+      await supabase
+        .from("study_sessions")
+        .update({ graduated_card_ids: [...existing, cardId] })
+        .eq("token", token);
     }
 
     // Update session counters
@@ -116,29 +116,24 @@ export async function POST(request: NextRequest, { params }: Props) {
             ? "good_count"
             : "easy_count";
 
-    const { data: updatedSession } = await supabase.rpc("increment_session_counters", {
-      p_token: token,
-      p_rating_column: ratingCountColumn,
-    });
+    // In batch mode: completed = cards graduated (Easy). In unlimited mode: every answer.
+    const shouldIncrementCompleted = isBatchMode ? isNewGraduation : true;
 
-    // Fallback: manual update if RPC doesn't exist
-    if (!updatedSession) {
-      const newCompleted = session.completed + 1;
-      const updateData: Record<string, unknown> = {
-        completed: newCompleted,
-        [ratingCountColumn]: (session[ratingCountColumn as keyof typeof session] as number) + 1,
-      };
+    const newCompleted = shouldIncrementCompleted ? session.completed + 1 : session.completed;
+    const updateData: Record<string, unknown> = {
+      completed: newCompleted,
+      [ratingCountColumn]: (session[ratingCountColumn as keyof typeof session] as number) + 1,
+    };
 
-      // In unlimited mode, mark done when all cards are answered
-      if (!isBatchMode && newCompleted >= session.total) {
-        updateData.status = "done";
-      }
-
-      await supabase
-        .from("study_sessions")
-        .update(updateData)
-        .eq("token", token);
+    // In unlimited mode, mark done when all cards are answered
+    if (!isBatchMode && newCompleted >= session.total) {
+      updateData.status = "done";
     }
+
+    await supabase
+      .from("study_sessions")
+      .update(updateData)
+      .eq("token", token);
 
     return NextResponse.json({
       ok: true,
